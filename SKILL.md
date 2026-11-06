@@ -57,7 +57,7 @@ DSH 对**推理类模型**默认发 OpenAI 新规范的 `developer` 角色放系
           - id: qwen3.8-flash
             name: qwen3.8-flash
             contextWindow: 1000000
-            maxTokens: 65536              # 不超过模型真实上限
+            maxTokens: 131072             # 按模型真实上限填（见下表）
             input: [text, image]
             reasoningEfforts:
               off: null
@@ -66,6 +66,18 @@ DSH 对**推理类模型**默认发 OpenAI 新规范的 `developer` 角色放系
               medium: medium
               high: high
 ```
+
+`maxTokens` 是**单次请求能生成的最大 token 数**，按模型真实上限填，不要凭感觉写：
+
+| 模型 | 文档「最大输出长度」 | 端点 `max_tokens` 校验区间 | 建议值 |
+| --- | --- | --- | --- |
+| qwen3.8-flash / qwen3.8-max / qwen3.7-plus | 131072 | [1, 131072] | **131072** |
+| kimi-k3 | 1048576 | [1, 1048576] | **262144** |
+| deepseek-v4.1-flash-1017 | — | 不设上限 | **384000** |
+
+qwen3.8 系列的硬顶就是 128k，**拿不到 256k**；kimi-k3 与 deepseek 可以给到 256k 以上。设大不会多花钱（按实际输出计费），只会放宽单次生成长度。
+
+> **字段细节**：DSH 对这个地址默认发 `max_completion_tokens`（`compat.maxTokensField` 的默认值）。端点**不校验**它的范围，但**照样按它截断输出**；若显式设 `maxTokensField: max_tokens`，端点会校验范围，超限直接 400。两者都会截断，而且**思考 token 也从这个额度里扣**——额度太小会出现「模型想了半天、一句话没说」的 `finish_reason: length`（实测 `max_completion_tokens=64` 时正文为空、64 token 全进了思考链）。
 
 `compat` 可写在 **provider 级**或**model 级**（model 级优先）。DSH 的判定逻辑：
 
@@ -88,7 +100,8 @@ const instructionRole = model.reasoning && compat?.supportsDeveloperRole !== fal
 | `400 Workspace endpoint is invalid.` | API 地址里抄了文档占位符（`llm-xxx` / `{WorkspaceId}`），网关解析不出业务空间 | 用控制台 **API Host** 列的真实域名，或退回 `dashscope.aliyuncs.com` / `maas.qianwenaiapi.com` |
 | `400 invalid_parameter_error: developer is not one of ['system','assistant','user','tool','function']` | DSH 发 `developer` 角色，端点只认 `system` | `compat.supportsDeveloperRole: false` |
 | `400 The product is not activated` | 模型 ID 带前缀或该产品未开通 | 去掉 `kimi/` 之类前缀；或先在控制台开通该模型 |
-| `400 Range of max_tokens should be [1, 131072]` | `maxTokens` 被原样当 `max_tokens` 发出，超出模型上限 | 把模型条目的 `maxTokens` 调到 ≤ 131072（建议 65536） |
+| `400 Range of max_tokens should be [1, 131072]` | 设了 `maxTokensField: max_tokens` 且 `maxTokens` 超出模型上限 | 去掉 `maxTokensField`，或把 `maxTokens` 降到上限内 |
+| 不报错，但回答被截断 / `finish_reason: length`、正文为空 | `maxTokens` 太小，额度被思考链吃光 | 按上表把 `maxTokens` 调到模型上限 |
 | 「获取可用模型」返回 401 / 404 | OpenAI 兼容端点不提供 `GET /models` | 忽略该按钮，手填模型 ID |
 | `MISSING_CREDENTIAL` | Key 未保存或环境变量未生效 | GUI 里重填并保存；或设 `apiKeyEnv` 指向的环境变量后重启 |
 

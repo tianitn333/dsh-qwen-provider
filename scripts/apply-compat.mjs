@@ -28,14 +28,19 @@ const arg = (name, fallback = undefined) => {
 const PROVIDER = arg("provider");
 const BASE = arg("base");
 const MODELS = arg("models");
-const MAX_TOKENS = Number(arg("max-tokens", 65536));
+const MAX_TOKENS = Number(arg("max-tokens", 131072));
+const MAX_TOKENS_MAP = arg("max-tokens-map", "");   // 例: qwen3.8-flash=131072,kimi-k3=262144
 const DRY = !!arg("dry-run", false);
 const YES = !!arg("yes", false);
 const PROFILE_ARG = arg("profile");
 const FILE_OVERRIDE = arg("file");
 
+const CAP_OVERRIDES = new Map(
+  String(MAX_TOKENS_MAP || "").split(",").map((p) => p.split("=")).filter(([k, v]) => k && v).map(([k, v]) => [k.trim(), Number(v.trim())]),
+);
+
 if (!PROVIDER) {
-  console.error("用法: node apply-compat.mjs --provider <id> [--profile desktop] [--base <url>] [--models a,b] [--max-tokens 65536] [--dry-run] [--yes]");
+  console.error("用法: node apply-compat.mjs --provider <id> [--profile desktop] [--base <url>] [--models a,b] [--max-tokens 131072] [--max-tokens-map id=n,id=n] [--dry-run] [--yes]");
   process.exit(2);
 }
 
@@ -143,9 +148,10 @@ function ensureCompat() {
   if (!existing) {
     const insertAt = baseKey ? baseKey.index + 1 : block.start + 1;
     const indent = " ".repeat(block.indent + 2);
-    const body = Object.entries(COMPAT_DEFAULTS).map(([k, v]) => `${indent}  ${k}: ${v}`).join("\n");
-    lines.splice(insertAt, 0, `${indent}compat:\n${body}`);
-    block.end += Object.keys(COMPAT_DEFAULTS).length + 1;
+    const body = Object.entries(COMPAT_DEFAULTS).map(([k, v]) => `${indent}  ${k}: ${v}`);
+    // 每个物理行必须是独立的数组元素，否则行号会错位
+    lines.splice(insertAt, 0, `${indent}compat:`, ...body);
+    block.end += body.length + 1;
     changes.push("新增 compat（supportsDeveloperRole=false / supportsReasoningEffort=false / thinkingFormat=qwen）");
     return;
   }
@@ -178,10 +184,11 @@ function setModels() {
   const entryIndent = " ".repeat(modelsKey.indent + 4);
   const body = [];
   for (const id of ids) {
+    const cap = CAP_OVERRIDES.get(id) ?? MAX_TOKENS;
     body.push(`${listIndent}- id: ${id}`);
     body.push(`${entryIndent}name: ${id}`);
     body.push(`${entryIndent}contextWindow: 1000000`);
-    body.push(`${entryIndent}maxTokens: ${MAX_TOKENS}`);
+    body.push(`${entryIndent}maxTokens: ${cap}`);
     body.push(`${entryIndent}input:`);
     body.push(`${entryIndent}  - text`);
     body.push(`${entryIndent}  - image`);
@@ -194,7 +201,7 @@ function setModels() {
   }
   lines.splice(modelsKey.index + 1, modelsKey.subEnd - modelsKey.index - 1, ...body);
   block.end += body.length - (modelsKey.subEnd - modelsKey.index - 1);
-  changes.push(`models → ${ids.join(", ")}（maxTokens=${MAX_TOKENS}）`);
+  changes.push(`models → ${ids.join(", ")}（maxTokens=${[...new Set(ids.map((i) => CAP_OVERRIDES.get(i) ?? MAX_TOKENS))].join("/")}）`);
 }
 
 ensureCompat();

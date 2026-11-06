@@ -146,10 +146,10 @@ const firstModel = models[0];
   const limit = m ? Number(m[1]) : null;
   report.checks.push({ name: "max-tokens-limit", status: r.status, limit, message: r.message });
   if (!AS_JSON) {
-    if (limit) console.log(`⚠️  max_tokens 上限: ${limit} → 模型条目的 maxTokens 请设 ≤ ${Math.min(limit, 65536)}`);
+    if (limit) console.log(`ℹ️  max_tokens 上限: ${limit} → 模型条目的 maxTokens 建议设为 ${limit}（思考 token 也占这个额度）`);
     else console.log(`ℹ️  max_tokens=262144: HTTP ${r.status}${r.message ? " :: " + r.message.slice(0, 90) : "（未报上限错误）"}`);
   }
-  if (limit) report.hints.push(`max_tokens 上限是 ${limit}，模型条目的 maxTokens 设成 ${Math.min(limit, 65536)} 以内（DSH 会原样发送该值）。`);
+  if (limit) report.hints.push(`该模型 max_tokens 上限是 ${limit}：模型条目的 maxTokens 设为 ${limit}。DSH 默认发 max_completion_tokens（端点不校验范围但会照此截断输出），思考 token 与正文共用该额度。`);
 }
 
 /* 3. enable_thinking 与工具调用 */

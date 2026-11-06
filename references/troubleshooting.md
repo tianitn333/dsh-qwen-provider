@@ -76,18 +76,36 @@ compat:
 
 ---
 
-## 坑 4 · `400 Range of max_tokens should be [1, 131072]`
+## 坑 4 · `400 Range of max_tokens should be [1, 131072]`（以及"不报错但被截断"）
 
-**根因**：DSH 把模型条目的 `maxTokens` **原样**作为 `max_tokens` 发出去。GUI「获取可用模型」带回来的目录值（如 `384000`）是模型的能力上限，不一定等于该端点接受的 `max_tokens` 上限。
+这两个是同一个旋钮的两面：**`maxTokens` = 单次请求允许生成的最大 token 数**。
 
-**判定**：把 `maxTokens` 调小即可。
+**端点对两个字段的行为不同**（实测）：
 
-**修法**：模型条目的 `maxTokens` 设成保守值（**建议 65536**，上限内即可）：
+| 字段 | 范围校验 | 是否截断输出 | 谁在发 |
+| --- | --- | --- | --- |
+| `max_tokens` | **校验**，超限直接 400 | 是 | 仅当 `compat.maxTokensField: max_tokens` |
+| `max_completion_tokens` | 不校验 | **是** | **DSH 默认发这个**（`maxTokensField` 默认值） |
 
-```yaml
-- id: qwen3.8-flash
-  maxTokens: 65536
+所以：DSH 默认路径不会因为 `maxTokens` 过大而 400，但**仍然会被它截断**。
+
+**截断的真实代价 —— 思考 token 也从同一个额度里扣**。实测 `max_completion_tokens=64` 时：
+
 ```
+finish_reason=length   content_chars=0   text_tokens=64   reasoning_tokens=525
+```
+
+也就是说：额度全被思考链吃掉，**正文一个字都没输出**，而日志里只有一句 `finish_reason: length`。排查"模型不吭声"时，先看 `maxTokens` 够不够。
+
+**各模型天花板**（两个域名实测一致，并与官方文档一致）：
+
+| 模型 | 文档「最大输出长度」 | `max_tokens` 校验区间 | 建议 `maxTokens` |
+| --- | --- | --- | --- |
+| qwen3.8-flash / qwen3.8-max / qwen3.7-plus | 131072 | [1, 131072] | **131072**（128k 就是硬顶，给不到 256k） |
+| kimi-k3 | 1048576 | [1, 1048576] | **262144** |
+| deepseek-v4.1-flash-1017 | — | 不设上限（接受 1e8） | **384000** |
+
+**修法**：把模型条目的 `maxTokens` 调到该模型的上限；别用 `maxTokensField: max_tokens`（除非你确认端点只认 `max_tokens`，那时必须严格 ≤ 上限，否则 400）。
 
 ---
 

@@ -98,7 +98,7 @@
           - id: qwen3.8-flash
             name: qwen3.8-flash
             contextWindow: 1000000
-            maxTokens: 65536
+            maxTokens: 131072
             input: [text, image]
             reasoningEfforts:
               off: null
@@ -107,6 +107,16 @@
               medium: medium
               high: high
 ```
+
+`maxTokens` 按模型真实上限填，别一律用同一个保守值：
+
+| 模型 | 建议 `maxTokens` |
+| --- | --- |
+| qwen3.8-flash / qwen3.8-max / qwen3.7-plus | 131072（硬顶，给不到 256k） |
+| kimi-k3 | 262144（端点最高接受 1048576） |
+| deepseek-v4.1-flash-1017 | 384000（端点不设上限） |
+
+DSH 对这类地址默认发 `max_completion_tokens`（端点不校验范围但照样按它截断）；**思考 token 与正文共用这个额度**，值太小会出现"想半天没输出"。
 
 顶层还有一段决定默认模型：
 

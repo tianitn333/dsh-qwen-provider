@@ -15,7 +15,8 @@ DSH 的「设置 → 模型 → 自定义模型 API」表单填完就能用？**
 | `400 Workspace endpoint is invalid.` | API 地址抄了文档占位符（`llm-xxx` / `{WorkspaceId}`） | 用控制台 **API Host** 的真实域名，或退回 `dashscope.aliyuncs.com` / `maas.qianwenaiapi.com` |
 | `400 developer is not one of ['system','assistant','user','tool','function']` | DSH 对推理模型发 `developer` 角色，端点只认 `system` | `compat.supportsDeveloperRole: false` |
 | `400 The product is not activated` | 模型 ID 用了带前缀的目录展示 ID（`kimi/kimi-k3.1-pro`） | 去掉前缀，用 `kimi-k3` |
-| `400 Range of max_tokens should be [1, 131072]` | DSH 把 `maxTokens` 原样当 `max_tokens` 发出 | 模型条目的 `maxTokens` 调到 ≤ 131072（建议 65536） |
+| `400 Range of max_tokens should be [1, 131072]` | 设了 `maxTokensField: max_tokens` 且 `maxTokens` 超出模型上限 | 去掉 `maxTokensField`，或把 `maxTokens` 降到上限内 |
+| 不报错但回答被截断 / `finish_reason: length`、正文为空 | `maxTokens` 太小，额度被思考链吃光 | 按模型上限填（见下表） |
 
 ## 目录结构
 
@@ -75,6 +76,16 @@ Key: sk-ws-H.…(len=116)  来源: ~/.dsh/.credentials.yaml (BAILIAN_API_KEY)
 ✅ enable_thinking: HTTP 200
 ✅ 工具调用: HTTP 200
 ```
+
+## 各模型的 `maxTokens` 上限（实测）
+
+| 模型 | 文档「最大输出长度」 | 端点 `max_tokens` 校验区间 | 建议 `maxTokens` |
+| --- | --- | --- | --- |
+| qwen3.8-flash / qwen3.8-max / qwen3.7-plus | 131072 | [1, 131072] | **131072**（硬顶，给不到 256k） |
+| kimi-k3 | 1048576 | [1, 1048576] | **262144** |
+| deepseek-v4.1-flash-1017 | — | 不设上限 | **384000** |
+
+`maxTokens` 是**单次请求能生成的最大 token 数**，思考链与正文共用这个额度——设小了会出现"模型想了半天、一句话没说"。DSH 默认发 `max_completion_tokens`（端点不校验范围，但会照此截断）；显式设 `maxTokensField: max_tokens` 时端点会校验范围，超限直接 400。
 
 ## 在 DSH 里安装本 skill
 
