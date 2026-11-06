@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# 备份与临时文件
+*.bak
+*.bak-*
+tmp-skill-test/
+.env
+.env.*
